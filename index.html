@@ -15,12 +15,12 @@
       padding: 20px;
     }
     .container {
-      width: 100%; max-width: 500px; background: var(--card);
+      width: 100%; max-width: 480px; background: var(--card);
       border: 1px solid #27272a; border-radius: 12px; padding: 28px;
       box-shadow: 0 25px 50px -12px rgba(0,0,0,0.6); text-align: center;
     }
     h1 { margin: 0 0 8px; font-size: 20px; font-weight: 600; }
-    p { margin: 0 0 20px; font-size: 13px; color: #a1a1aa; line-height: 1.5; }
+    p { margin: 0 0 20px; font-size: 13px; color: #a1a1aa; }
     
     .input-box {
       width: 100%; padding: 12px 14px; background: #09090b;
@@ -38,100 +38,96 @@
 
     .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .grid button {
-      padding: 10px; background: #27272a; border: 1px solid #3f3f46;
+      padding: 12px 8px; background: #27272a; border: 1px solid #3f3f46;
       border-radius: 6px; color: #d4d4d8; font-size: 12px; cursor: pointer;
+      transition: background 0.15s;
     }
     .grid button:hover { background: #3f3f46; color: #fff; }
 
-    /* The Invisible Full-Screen Trigger */
-    #click-shield {
-      position: fixed; inset: 0; width: 100vw; height: 100vh;
-      background: transparent; z-index: 999999; display: none; cursor: pointer;
+    #status {
+      display: none; padding: 10px; border-radius: 6px; font-size: 12px; margin-top: 14px;
     }
+    .err { background: #2a1414; border: 1px solid #5a2222; color: #f87171; display: block !important; }
   </style>
 </head>
 <body>
 
-  <!-- Hidden Full-Screen Trigger -->
-  <a id="hidden-link" target="_blank" rel="noopener noreferrer" style="display:none;"></a>
-  <div id="click-shield"></div>
-
   <div class="container">
     <h1>Web Workspace</h1>
-    <p>Select a destination or enter a URL below, then click Launch.</p>
+    <p>Click any preset or enter a URL below to open in about:blank.</p>
 
-    <input type="text" class="input-box" id="target-url" placeholder="https://www.crazygames.com/game/polytrack">
-    <button class="btn" id="launch-btn">🚀 Arm & Launch</button>
+    <input type="text" class="input-box" id="custom-url" placeholder="https://www.crazygames.com/game/polytrack">
+    <button class="btn" id="custom-launch-btn">🚀 Open Custom URL</button>
 
     <div class="grid">
-      <button data-url="https://www.crazygames.com/game/polytrack">🏎️ Polytrack</button>
-      <button data-url="https://en.wikipedia.org/wiki/Main_Page">📚 Wikipedia</button>
-      <button data-url="https://www.google.com/search?igu=1">🔍 Google</button>
-      <button data-url="https://www.bing.com">🌐 Bing</button>
+      <button class="preset-btn" data-url="https://www.crazygames.com/game/polytrack">🏎️ Polytrack</button>
+      <button class="preset-btn" data-url="https://piped.video">📺 YouTube (Piped)</button>
+      <button class="preset-btn" data-url="https://en.wikipedia.org/wiki/Main_Page">📚 Wikipedia</button>
+      <button class="preset-btn" data-url="https://www.google.com/search?igu=1">🔍 Google Search</button>
     </div>
+
+    <div id="status"></div>
   </div>
 
   <script>
-    let pendingUrl = '';
-    const shield = document.getElementById('click-shield');
-    const hiddenLink = document.getElementById('hidden-link');
-
-    function resolveUrl(url) {
-      if (!url) return '';
-      url = url.trim();
-      if (!/^https?:\\/\\//i.test(url)) url = 'https://' + url;
-      return url;
-    }
-
-    function triggerLaunch(url) {
-      if (!url) return;
-      pendingUrl = resolveUrl(url);
-
-      // Method A: Direct window.open attempt
-      try {
-        const w = window.open('about:blank', '_blank');
-        if (w && !w.closed) {
-          writeCloak(w, pendingUrl);
-          return;
-        }
-      } catch (e) {}
-
-      // Method B: Fullscreen Click-Shield Fallback (The movie-site popunder technique)
-      shield.style.display = 'block';
-    }
-
-    // When shield is active, clicking ANYWHERE on the screen executes the navigation
-    shield.addEventListener('click', () => {
-      shield.style.display = 'none';
-      if (!pendingUrl) return;
-
-      const w = window.open('about:blank', '_blank');
-      if (w) {
-        writeCloak(w, pendingUrl);
-      } else {
-        // Method C: Fallback to direct anchor dispatch
-        hiddenLink.href = pendingUrl;
-        hiddenLink.click();
+    function launch(targetUrl) {
+      if (!targetUrl || !targetUrl.trim()) {
+        showStatus('Please enter a valid URL', true);
+        return;
       }
-    });
+      targetUrl = targetUrl.trim();
+      if (!/^https?:\\/\\//i.test(targetUrl)) targetUrl = 'https://' + targetUrl;
 
-    function writeCloak(w, target) {
-      w.document.open();
-      w.document.write(\`
+      // YouTube Video Embed Auto-Converter
+      if (targetUrl.includes('youtube.com') || targetUrl.includes('youtu.be')) {
+        try {
+          const u = new URL(targetUrl);
+          let vid = null;
+          if (u.pathname === '/watch') vid = u.searchParams.get('v');
+          else if (u.hostname === 'youtu.be') vid = u.pathname.replace(/^\\//, '');
+          else if (u.pathname.startsWith('/shorts/')) vid = u.pathname.split('/')[2];
+          if (vid) {
+            targetUrl = 'https://www.youtube-nocookie.com/embed/' + vid + '?autoplay=1&enablejsapi=1&origin=https://www.google.com';
+          }
+        } catch(e) {}
+      }
+
+      // Direct synchronous window open
+      const w = window.open('', '_blank');
+      if (!w) {
+        showStatus('Popups are blocked by your browser settings. Please allow popups for this site.', true);
+        return;
+      }
+
+      try {
+        w.document.open();
+        w.document.write(\`
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <title>about:blank</title>
   <style>
-    html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:#000; }
-    iframe { width:100%; height:100%; border:none; display:block; }
-    #decoy { position:absolute; inset:0; width:100%; height:100%; border:none; display:none; background:#fff; z-index:99; }
-    #shield { position:absolute; inset:0; width:100%; height:100%; display:none; z-index:100; background:transparent; }
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0; width: 100%; height: 100%;
+      overflow: hidden; background: #000;
+    }
+    iframe {
+      width: 100%; height: 100%; border: none; display: block;
+    }
+    #decoy {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      border: none; display: none; background: #fff; z-index: 99;
+    }
+    #shield {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      display: none; z-index: 100; background: transparent;
+    }
   </style>
 </head>
 <body>
-  <iframe id="game" src="\${target}" allow="autoplay *; fullscreen *; gamepad *; microphone *; camera *; clipboard-write *; encrypted-media *" allowfullscreen></iframe>
+  <iframe id="game" src="\${targetUrl}" allow="autoplay *; fullscreen *; gamepad *; microphone *; camera *; clipboard-write *; encrypted-media *" allowfullscreen></iframe>
   <iframe id="decoy" src="https://en.wikipedia.org/wiki/Main_Page"></iframe>
   <div id="shield"></div>
 
@@ -140,48 +136,63 @@
     let focusTimer = null;
     const game = document.getElementById('game');
     const decoy = document.getElementById('decoy');
-    const s = document.getElementById('shield');
+    const shield = document.getElementById('shield');
 
+    // Boss Key: Alt-tab / switch tabs
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden' && !hidden) {
         hidden = true;
         game.style.display = 'none';
         decoy.style.display = 'block';
-        s.style.display = 'block';
+        shield.style.display = 'block';
         focusTimer = setInterval(() => { window.focus(); }, 50);
       }
     });
 
+    // Restore Key: Alt + X
     document.addEventListener('keydown', (e) => {
       if (e.altKey && (e.key === 'x' || e.key === 'X')) {
         if (hidden) {
           hidden = false;
           if (focusTimer) { clearInterval(focusTimer); focusTimer = null; }
           decoy.style.display = 'none';
-          s.style.display = 'none';
+          shield.style.display = 'none';
           game.style.display = 'block';
         }
       }
     });
 
+    // Lock Title to about:blank
     setInterval(() => {
       if (document.title !== 'about:blank') document.title = 'about:blank';
     }, 100);
   <\\/script>
 </body>
 </html>
-      \`);
-      w.document.close();
+        \`);
+        w.document.close();
+      } catch (err) {
+        showStatus('Error writing to blank window: ' + err.message, true);
+      }
     }
 
-    document.getElementById('launch-btn').addEventListener('click', () => {
-      triggerLaunch(document.getElementById('target-url').value);
+    function showStatus(msg, isError) {
+      const el = document.getElementById('status');
+      el.textContent = msg;
+      el.className = isError ? 'err' : '';
+    }
+
+    // Direct event listener for the main launch button
+    document.getElementById('custom-launch-btn').addEventListener('click', () => {
+      launch(document.getElementById('custom-url').value);
     });
 
-    document.querySelectorAll('.grid button').forEach(btn => {
+    // Direct event listeners for the preset buttons
+    document.querySelectorAll('.preset-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        document.getElementById('target-url').value = btn.dataset.url;
-        triggerLaunch(btn.dataset.url);
+        const target = btn.getAttribute('data-url');
+        document.getElementById('custom-url').value = target;
+        launch(target);
       });
     });
   </script>
