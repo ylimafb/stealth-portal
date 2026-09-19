@@ -45,9 +45,10 @@
     .grid button:hover { background: #3f3f46; color: #fff; }
 
     #status {
-      display: none; padding: 10px; border-radius: 6px; font-size: 12px; margin-top: 14px;
+      display: none; padding: 12px; border-radius: 6px; font-size: 12px; margin-top: 14px; line-height: 1.4;
     }
     .err { background: #2a1414; border: 1px solid #5a2222; color: #f87171; display: block !important; }
+    .ok { background: #142a14; border: 1px solid #225a22; color: #4ade80; display: block !important; }
   </style>
 </head>
 <body>
@@ -57,144 +58,122 @@
     <p>Click any preset or enter a URL below to open in about:blank.</p>
 
     <input type="text" class="input-box" id="custom-url" placeholder="https://www.crazygames.com/game/polytrack">
-    <button class="btn" id="custom-launch-btn">🚀 Open Custom URL</button>
+    <button class="btn" id="custom-launch-btn" onclick="launchCustom()">🚀 Open Custom URL</button>
 
     <div class="grid">
-      <button class="preset-btn" data-url="https://www.crazygames.com/game/polytrack">🏎️ Polytrack</button>
-      <button class="preset-btn" data-url="https://piped.video">📺 YouTube (Piped)</button>
-      <button class="preset-btn" data-url="https://en.wikipedia.org/wiki/Main_Page">📚 Wikipedia</button>
-      <button class="preset-btn" data-url="https://www.google.com/search?igu=1">🔍 Google Search</button>
+      <button class="preset-btn" onclick="launch('https://www.crazygames.com/game/polytrack')">🏎️ Polytrack</button>
+      <button class="preset-btn" onclick="launch('https://piped.video')">📺 YouTube (Piped)</button>
+      <button class="preset-btn" onclick="launch('https://en.wikipedia.org/wiki/Main_Page')">📚 Wikipedia</button>
+      <button class="preset-btn" onclick="launch('https://www.google.com/search?igu=1')">🔍 Google Search</button>
     </div>
 
     <div id="status"></div>
   </div>
 
   <script>
-    function launch(targetUrl) {
-      if (!targetUrl || !targetUrl.trim()) {
-        showStatus('Please enter a valid URL', true);
-        return;
-      }
-      targetUrl = targetUrl.trim();
-      if (!/^https?:\\/\\//i.test(targetUrl)) targetUrl = 'https://' + targetUrl;
+    function showStatus(msg, isError) {
+      const el = document.getElementById('status');
+      el.innerHTML = msg;
+      el.className = isError ? 'err' : 'ok';
+    }
 
-      // YouTube Video Embed Auto-Converter
-      if (targetUrl.includes('youtube.com') || targetUrl.includes('youtu.be')) {
+    function formatUrl(raw) {
+      if (!raw) return '';
+      raw = raw.trim();
+      if (!/^https?:\/\//i.test(raw)) raw = 'https://' + raw;
+
+      if (raw.includes('youtube.com') || raw.includes('youtu.be')) {
         try {
-          const u = new URL(targetUrl);
+          const u = new URL(raw);
           let vid = null;
           if (u.pathname === '/watch') vid = u.searchParams.get('v');
-          else if (u.hostname === 'youtu.be') vid = u.pathname.replace(/^\\//, '');
+          else if (u.hostname === 'youtu.be') vid = u.pathname.replace(/^\//, '');
           else if (u.pathname.startsWith('/shorts/')) vid = u.pathname.split('/')[2];
           if (vid) {
-            targetUrl = 'https://www.youtube-nocookie.com/embed/' + vid + '?autoplay=1&enablejsapi=1&origin=https://www.google.com';
+            return 'https://www.youtube-nocookie.com/embed/' + vid + '?autoplay=1&enablejsapi=1&origin=https://www.google.com';
           }
         } catch(e) {}
       }
+      return raw;
+    }
 
-      // Direct synchronous window open
-      const w = window.open('', '_blank');
+    function launchCustom() {
+      const val = document.getElementById('custom-url').value;
+      if (!val) {
+        showStatus('Please enter a URL first', true);
+        return;
+      }
+      launch(val);
+    }
+
+    function launch(targetUrl) {
+      const finalUrl = formatUrl(targetUrl);
+      if (!finalUrl) {
+        showStatus('Invalid destination URL', true);
+        return;
+      }
+
+      // 1. Direct window open attempt
+      const w = window.open('about:blank', '_blank');
+
+      // 2. If administrator policy completely killed popups, offer Instant In-Tab Stealth Mode
       if (!w) {
-        showStatus('Popups are blocked by your browser settings. Please allow popups for this site.', true);
+        showStatus('<b>Popups are blocked by administrator policy.</b><br><br><button onclick="embedInThisTab(\'' + finalUrl + '\')" style="padding:8px 14px;background:#3b82f6;border:none;color:#fff;border-radius:6px;cursor:pointer;font-weight:600;">Play In This Tab (Full Stealth Mode)</button>', true);
         return;
       }
 
       try {
+        const payload = '<!DOCTYPE html>' +
+          '<html><head><meta charset="utf-8"><title>about:blank</title>' +
+          '<style>' +
+          '*,*::before,*::after{box-sizing:border-box;}' +
+          'html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000;}' +
+          'iframe{width:100%;height:100%;border:none;display:block;}' +
+          '#decoy{position:absolute;inset:0;width:100%;height:100%;border:none;display:none;background:#fff;z-index:99;}' +
+          '#shield{position:absolute;inset:0;width:100%;height:100%;display:none;z-index:100;background:transparent;}' +
+          '</style></head><body>' +
+          '<iframe id="game" src="' + finalUrl + '" allow="autoplay *; fullscreen *; gamepad *; microphone *; camera *; clipboard-write *; encrypted-media *" allowfullscreen></iframe>' +
+          '<iframe id="decoy" src="https://en.wikipedia.org/wiki/Main_Page"></iframe>' +
+          '<div id="shield"></div>' +
+          '<script>' +
+          'let hidden=false,focusTimer=null;' +
+          'const g=document.getElementById("game"),d=document.getElementById("decoy"),s=document.getElementById("shield");' +
+          'document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="hidden"&&!hidden){hidden=true;g.style.display="none";d.style.display="block";s.style.display="block";focusTimer=setInterval(()=>{window.focus();},50);}});' +
+          'document.addEventListener("keydown",e=>{if(e.altKey&&(e.key==="x"||e.key==="X")){if(hidden){hidden=false;if(focusTimer){clearInterval(focusTimer);focusTimer=null;}d.style.display="none";s.style.display="none";g.style.display="block";}}});' +
+          'setInterval(()=>{if(document.title!=="about:blank")document.title="about:blank";},100);' +
+          '<\/script></body></html>';
+
         w.document.open();
-        w.document.write(\`
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>about:blank</title>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; }
-    html, body {
-      margin: 0; padding: 0; width: 100%; height: 100%;
-      overflow: hidden; background: #000;
-    }
-    iframe {
-      width: 100%; height: 100%; border: none; display: block;
-    }
-    #decoy {
-      position: absolute; inset: 0; width: 100%; height: 100%;
-      border: none; display: none; background: #fff; z-index: 99;
-    }
-    #shield {
-      position: absolute; inset: 0; width: 100%; height: 100%;
-      display: none; z-index: 100; background: transparent;
-    }
-  </style>
-</head>
-<body>
-  <iframe id="game" src="\${targetUrl}" allow="autoplay *; fullscreen *; gamepad *; microphone *; camera *; clipboard-write *; encrypted-media *" allowfullscreen></iframe>
-  <iframe id="decoy" src="https://en.wikipedia.org/wiki/Main_Page"></iframe>
-  <div id="shield"></div>
-
-  <script>
-    let hidden = false;
-    let focusTimer = null;
-    const game = document.getElementById('game');
-    const decoy = document.getElementById('decoy');
-    const shield = document.getElementById('shield');
-
-    // Boss Key: Alt-tab / switch tabs
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden' && !hidden) {
-        hidden = true;
-        game.style.display = 'none';
-        decoy.style.display = 'block';
-        shield.style.display = 'block';
-        focusTimer = setInterval(() => { window.focus(); }, 50);
-      }
-    });
-
-    // Restore Key: Alt + X
-    document.addEventListener('keydown', (e) => {
-      if (e.altKey && (e.key === 'x' || e.key === 'X')) {
-        if (hidden) {
-          hidden = false;
-          if (focusTimer) { clearInterval(focusTimer); focusTimer = null; }
-          decoy.style.display = 'none';
-          shield.style.display = 'none';
-          game.style.display = 'block';
-        }
-      }
-    });
-
-    // Lock Title to about:blank
-    setInterval(() => {
-      if (document.title !== 'about:blank') document.title = 'about:blank';
-    }, 100);
-  <\\/script>
-</body>
-</html>
-        \`);
+        w.document.write(payload);
         w.document.close();
+        showStatus('Launched successfully in about:blank!', false);
       } catch (err) {
-        showStatus('Error writing to blank window: ' + err.message, true);
+        showStatus('Error writing to window: ' + err.message, true);
       }
     }
 
-    function showStatus(msg, isError) {
-      const el = document.getElementById('status');
-      el.textContent = msg;
-      el.className = isError ? 'err' : '';
-    }
-
-    // Direct event listener for the main launch button
-    document.getElementById('custom-launch-btn').addEventListener('click', () => {
-      launch(document.getElementById('custom-url').value);
-    });
-
-    // Direct event listeners for the preset buttons
-    document.querySelectorAll('.preset-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const target = btn.getAttribute('data-url');
-        document.getElementById('custom-url').value = target;
-        launch(target);
+    // Fallback: If administrator strictly blocks popups, this instantly converts the current tab into the stealth player
+    function embedInThisTab(url) {
+      document.body.innerHTML = '<iframe id="game" src="' + url + '" style="position:fixed;inset:0;width:100%;height:100%;border:none;background:#000;" allow="autoplay *; fullscreen *; gamepad *; microphone *; camera *; clipboard-write *; encrypted-media *" allowfullscreen></iframe><iframe id="decoy" src="https://en.wikipedia.org/wiki/Main_Page" style="position:fixed;inset:0;width:100%;height:100%;border:none;display:none;background:#fff;z-index:99;"></iframe><div id="shield" style="position:fixed;inset:0;width:100%;height:100%;display:none;z-index:100;background:transparent;"></div>';
+      document.title = 'about:blank';
+      let hidden = false, focusTimer = null;
+      const g = document.getElementById('game'), d = document.getElementById('decoy'), s = document.getElementById('shield');
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden' && !hidden) {
+          hidden = true; g.style.display = 'none'; d.style.display = 'block'; s.style.display = 'block';
+          focusTimer = setInterval(() => { window.focus(); }, 50);
+        }
       });
-    });
+      document.addEventListener('keydown', e => {
+        if (e.altKey && (e.key === 'x' || e.key === 'X')) {
+          if (hidden) {
+            hidden = false;
+            if (focusTimer) { clearInterval(focusTimer); focusTimer = null; }
+            d.style.display = 'none'; s.style.display = 'none'; g.style.display = 'block';
+          }
+        }
+      });
+    }
   </script>
 </body>
 </html>
