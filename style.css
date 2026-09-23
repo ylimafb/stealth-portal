@@ -1,0 +1,9 @@
+:root { color-scheme: dark; font: 15px system-ui, sans-serif; }
+body { max-width: 720px; margin: 8vh auto; padding: 20px; background: #11141a; color: #edf0f6; }
+main { padding: 28px; border: 1px solid #364055; border-radius: 16px; background: #1c222d; }
+h1 { margin-top: 0; }
+p { line-height: 1.6; }
+code, strong { color: #a7cbff; overflow-wrap: anywhere; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 22px; }
+button, a { padding: 10px 13px; border: 1px solid #53647d; border-radius: 9px; background: #2c3b52; color: #fff; font: inherit; text-decoration: none; cursor: pointer; }
+button:hover, a:hover { background: #39506f; }
